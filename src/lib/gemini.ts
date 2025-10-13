@@ -613,7 +613,7 @@ export async function convertPdfToImages(file: File): Promise<string[]> {
 
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     const page = await pdf.getPage(pageNum);
-    const scale = 2.0; // Higher scale for better quality
+    const scale = 2.5; // Higher scale for better quality
     const viewport = page.getViewport({ scale });
 
     const canvas = document.createElement('canvas');
