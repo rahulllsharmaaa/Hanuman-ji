@@ -608,18 +608,26 @@ export function QuestionGenerator() {
         // Try to generate a valid question (with retry logic)
         let validQuestionGenerated = false;
         let attempts = 0;
-        const maxAttempts = 5; // Maximum attempts to generate a valid question
-        
+        const maxAttempts = 3; // Reduced to 3 attempts to avoid infinite loops
+
+        console.log(`\n🔄 Starting question generation for topic: ${topic.name}, Question ${questionIndex + 1}/${topic.questionsToGenerate}`);
+
         while (!validQuestionGenerated && attempts < maxAttempts) {
           attempts++;
-          
+
           try {
             const isZeroWeightage = (topic.weightage || 0) === 0;
             const topicTypeLabel = isZeroWeightage ? '(Zero-weightage topic)' : `(${((topic.weightage || 0.02) * 100).toFixed(1)}% weightage)`;
-            
-            toast(`🤖 Gemini generating question ${questionIndex + 1}/${topic.questionsToGenerate} for ${topic.name} ${topicTypeLabel} (attempt ${attempts})...`, { duration: 2000 });
 
-            const generatedQuestions = await generateQuestionsForTopic(
+            console.log(`📡 API Call - Attempt ${attempts}/${maxAttempts} for question ${questionIndex + 1}`);
+            toast(`🤖 Gemini generating question ${questionIndex + 1}/${topic.questionsToGenerate} for ${topic.name} ${topicTypeLabel} (attempt ${attempts})...`, { duration: 3000 });
+
+            // Add timeout wrapper to prevent infinite hangs
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('API call timeout after 60 seconds')), 60000)
+            );
+
+            const generationPromise = generateQuestionsForTopic(
               topic,
               examName,
               courseName,
@@ -631,37 +639,51 @@ export function QuestionGenerator() {
               topic.notes || '' // Pass topic notes for solution generation
             );
 
-            if (generatedQuestions.length > 0) {
-              const question = generatedQuestions[0];
-              
-              // Validate the question structure
-              const validation = validateQuestionAnswer(question);
+            const generatedQuestions = await Promise.race([generationPromise, timeoutPromise]) as ExtractedQuestion[];
 
-              if (!validation.isValid) {
-                toast.error(`❌ Question validation failed: ${validation.reason}. Retrying...`);
-                console.log('Invalid question:', {
-                  question: question.question_statement,
-                  options: question.options,
-                  answer: question.answer,
-                  reason: validation.reason
-                });
+            console.log(`✅ API Response received, ${generatedQuestions.length} question(s) returned`);
 
-                // Wait before retry
-                await new Promise(resolve => setTimeout(resolve, 3000));
-                continue;
-              }
+            if (!generatedQuestions || generatedQuestions.length === 0) {
+              console.error('❌ Empty response from API');
+              toast.error(`❌ Empty response from API. Retrying...`);
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              continue;
+            }
+
+            const question = generatedQuestions[0];
+            console.log(`📋 Question received: ${question.question_statement?.slice(0, 100)}...`);
+
+            // Validate the question structure
+            const validation = validateQuestionAnswer(question);
+
+            if (!validation.isValid) {
+              console.warn(`⚠️ Validation failed: ${validation.reason}`);
+              toast.error(`❌ Question validation failed: ${validation.reason}. Retrying...`);
+              console.log('Invalid question:', {
+                question: question.question_statement,
+                options: question.options,
+                answer: question.answer,
+                reason: validation.reason
+              });
+
+              // Wait before retry
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              continue;
+            }
 
               // Additional validation for options based on question type
               if (questionType === 'MCQ' || questionType === 'MSQ') {
                 if (!question.options || question.options.length !== 4) {
+                  console.warn(`⚠️ Options validation failed: Expected 4, got ${question.options?.length || 0}`);
                   toast.error(`❌ ${questionType} must have exactly 4 options. Got ${question.options?.length || 0}. Retrying...`);
-                  await new Promise(resolve => setTimeout(resolve, 3000));
+                  await new Promise(resolve => setTimeout(resolve, 2000));
                   continue;
                 }
               }
 
               // For NAT and Subjective, ensure options are null or empty
               if (questionType === 'NAT' || questionType === 'Subjective') {
+                console.log(`ℹ️ Setting options to null for ${questionType}`);
                 question.options = null;
               }
               
@@ -672,9 +694,11 @@ export function QuestionGenerator() {
               if (isWrong) {
                 console.warn(`⚠️ Gemini self-flagged question as wrong: ${validationReason}`);
                 toast.error(`⚠️ Gemini detected issue: ${validationReason}. Retrying...`);
-                await new Promise(resolve => setTimeout(resolve, 3000));
+                await new Promise(resolve => setTimeout(resolve, 2000));
                 continue;
               }
+
+              console.log('✅ All validations passed, proceeding to save...');
 
               // Question is valid, save to database
               const questionToSave = {
@@ -698,15 +722,19 @@ export function QuestionGenerator() {
                 is_wrong: isWrong || null
               };
 
+              console.log('💾 Saving question to database...');
               const { data, error } = await supabase
                 .from('new_questions')
                 .insert([questionToSave])
                 .select();
 
               if (error) {
-                console.error('Error saving question:', error);
+                console.error('❌ Database error:', error);
                 toast.error(`Failed to save question: ${error.message}`);
+                // Don't retry on database errors, skip this question
+                break;
               } else {
+                console.log('✅ Question saved successfully to database');
                 totalGenerated++;
                 allGeneratedQuestions.push(question);
                 validQuestionGenerated = true;
@@ -744,31 +772,39 @@ export function QuestionGenerator() {
                   ? `✅ Question ${questionIndex + 1} for zero-weightage topic validated and saved!`
                   : `✅ Question ${questionIndex + 1} validated and saved!`;
                 toast.success(successMessage);
-              }
-            }
 
-            // Delay between attempts/questions
-            await new Promise(resolve => setTimeout(resolve, 8000));
+                // Delay between successful questions (reduced from 8s to 5s)
+                console.log('⏳ Waiting 5 seconds before next question...');
+                await new Promise(resolve => setTimeout(resolve, 5000));
+              }
 
           } catch (error) {
-            console.error(`Error generating question ${questionIndex + 1} for topic ${topic.name} (attempt ${attempts}):`, error);
+            console.error(`❌ Error in attempt ${attempts}/${maxAttempts}:`, error);
             toast.error(`Failed to generate question ${questionIndex + 1} (attempt ${attempts}): ${error.message}`);
-            
-            // Wait before retry
-            await new Promise(resolve => setTimeout(resolve, 5000));
+
+            // Wait before retry (reduced from 5s to 3s)
+            if (attempts < maxAttempts) {
+              console.log(`⏳ Waiting 3 seconds before retry...`);
+              await new Promise(resolve => setTimeout(resolve, 3000));
+            }
           }
         }
-        
+
         // If we couldn't generate a valid question after max attempts
         if (!validQuestionGenerated) {
-          toast.error(`⚠️ Could not generate valid question ${questionIndex + 1} for ${topic.name} after ${maxAttempts} attempts. Skipping...`);
-          console.warn(`Skipped question ${questionIndex + 1} for topic ${topic.name} after ${maxAttempts} failed attempts`);
+          console.warn(`⚠️ Failed to generate question ${questionIndex + 1} after ${maxAttempts} attempts`);
+          toast.error(`⚠️ Could not generate valid question ${questionIndex + 1} for ${topic.name} after ${maxAttempts} attempts. Skipping to next question...`, { duration: 5000 });
+
+          // Don't let one failed question stop the entire generation
+          // Continue to next question
         }
       }
 
-      // Delay between topics
+      // Delay between topics (reduced from 5s to 3s)
       if (topicIndex < topicsWithActualNeeds.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        console.log(`\n✅ Topic "${topic.name}" completed. Waiting 3 seconds before next topic...\n`);
+        toast(`✅ Topic "${topic.name}" completed. Moving to next topic...`, { duration: 3000 });
+        await new Promise(resolve => setTimeout(resolve, 3000));
       }
     }
 

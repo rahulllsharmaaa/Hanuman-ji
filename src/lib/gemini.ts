@@ -451,8 +451,10 @@ async function callGeminiAPI(prompt: string, imageBase64?: string, temperature: 
 
     // Get next API key
     const { key: apiKey, index: keyIndex } = getNextGeminiKey();
+    console.log(`🔑 Using API key ${keyIndex + 1}/${API_KEY_STATES.length} (attempt ${attemptCount}/${maxTotalRetries})`);
 
     try {
+      const callStartTime = Date.now();
       const requestBody: any = {
         contents: [{
           parts: []
@@ -479,6 +481,7 @@ async function callGeminiAPI(prompt: string, imageBase64?: string, temperature: 
         });
       }
 
+      console.log(`📤 Sending request to Gemini API...`);
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: {
@@ -486,6 +489,9 @@ async function callGeminiAPI(prompt: string, imageBase64?: string, temperature: 
         },
         body: JSON.stringify(requestBody)
       });
+
+      const fetchElapsed = Date.now() - callStartTime;
+      console.log(`📥 Response received in ${(fetchElapsed / 1000).toFixed(1)}s, status: ${response.status}`);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -801,7 +807,9 @@ ${recentQuestions.slice(-3).join('\n')}
 
   while (attempt < maxRetries) {
     attempt++;
-    console.log(`Question generation attempt ${attempt}/${maxRetries}`);
+    const startTime = Date.now();
+    console.log(`\n🔄 Question generation attempt ${attempt}/${maxRetries} for topic: ${topic.name}`);
+    console.log(`⏰ Started at: ${new Date().toLocaleTimeString()}`);
 
   const prompt = `You are an expert professor creating ${examName} ${courseName} ${questionType} entrance exam questions. This is a competitive exam preparation, so maintain HIGHEST quality standards.
 
@@ -978,23 +986,27 @@ INCORRECT (will cause errors):
 Generate exactly ${count} question(s). Output only pure JSON. No markdown, no line breaks in strings.`;
 
   try {
-    console.log(`CHECKPOINT: Starting question generation (attempt ${attempt}/${maxRetries})`, {
+    console.log(`📊 CHECKPOINT: Starting question generation (attempt ${attempt}/${maxRetries})`, {
       topicName: topic.name,
       questionType,
       count,
-      hasPYQs: pyqs.length > 0,
-      hasNotes: !!topicNotes
+      pyqsCount: pyqs.length,
+      hasNotes: !!topicNotes,
+      existingQuestionsCount: existingQuestionsContext.split('\n\n').filter(Boolean).length
     });
 
+    console.log(`🌐 Calling Gemini API with prompt length: ${prompt.length} characters...`);
     const response = await callGeminiAPI(prompt, undefined, 0.3, 4096);
+    const elapsed = Date.now() - startTime;
+    console.log(`✅ API call completed in ${(elapsed / 1000).toFixed(1)}s`);
 
     // Checkpoint: Validate response received
     if (!response || response.trim() === '') {
-      console.error('CHECKPOINT FAILED: Empty response from Gemini');
+      console.error('❌ CHECKPOINT FAILED: Empty response from Gemini');
       throw new Error('Empty response from Gemini API');
     }
 
-    console.log('CHECKPOINT PASSED: Response received', { responseLength: response.length });
+    console.log('✅ CHECKPOINT PASSED: Response received', { responseLength: response.length, timeElapsed: `${(elapsed / 1000).toFixed(1)}s` });
 
     // Parse JSON response using robust parser
     let questions: ExtractedQuestion[] = [];
