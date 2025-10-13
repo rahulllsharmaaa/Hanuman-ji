@@ -762,15 +762,39 @@ export async function generateQuestionsForTopic(
   let lastError: Error | null = null;
 
   const pyqContext = pyqs.length > 0 ?
-    `\n\nPREVIOUS YEAR QUESTIONS FOR INSPIRATION (Study these patterns and difficulty levels):\n${pyqs.map((q, i) =>
-      `\nPYQ ${i+1} (${q.year} - ${q.slot || 'N/A'} - ${q.question_type || 'N/A'}):\nQuestion: ${q.question_statement}${q.options && q.options.length > 0 ? `\nOptions:\n  A. ${q.options[0] || ''}\n  B. ${q.options[1] || ''}\n  C. ${q.options[2] || ''}\n  D. ${q.options[3] || ''}` : ''}${q.answer ? `\nCorrect Answer: ${q.answer}` : ''}${q.solution ? `\nSolution: ${q.solution.slice(0, 300)}` : ''}`
-    ).join('\n\n')}` : '';
+    `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📚 PREVIOUS YEAR QUESTIONS - INSPIRATION SOURCE ONLY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+These PYQs are from the SAME topic, course, slot, part, and question type you're generating for.
+Study their PATTERN, DIFFICULTY, and STYLE - but DO NOT copy or slightly modify them.
+Use them as reference to understand exam expectations, but create COMPLETELY NEW questions.
+
+Total PYQs provided: ${pyqs.length}
+${pyqs.map((q, i) =>
+      `\n📝 PYQ ${i+1} (Year: ${q.year}, Slot: ${q.slot || 'N/A'}, Part: ${q.part || 'N/A'}, Type: ${q.question_type}):\nQuestion: ${q.question_statement}${q.options && q.options.length > 0 ? `\nOptions:\n  A. ${q.options[0] || ''}\n  B. ${q.options[1] || ''}\n  C. ${q.options[2] || ''}\n  D. ${q.options[3] || ''}` : ''}${q.answer ? `\nCorrect Answer: ${q.answer}` : ''}${q.solution ? `\nSolution: ${q.solution.slice(0, 300)}` : ''}`
+    ).join('\n\n')}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━` : '';
 
   const existingContext = existingQuestionsContext ?
-    `\n\nALREADY GENERATED QUESTIONS (Avoid duplication, create fresh questions):\n${existingQuestionsContext.slice(-1500)}` : '';
+    `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚫 ALREADY GENERATED QUESTIONS - MUST NOT REPEAT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+These questions have been ALREADY generated for this exact configuration (topic, type, slot, part).
+You MUST create questions that are COMPLETELY DIFFERENT from these.
+Check every aspect: question statement, options, concepts tested, scenarios used.
+If your generated question is similar to any below, REJECT it and create a fresh one.
+
+Total already generated: ${existingQuestionsContext.split('\n\n').length}
+${existingQuestionsContext.slice(-2000)}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━` : '';
 
   const recentContext = recentQuestions.length > 0 ?
-    `\n\nRECENTLY GENERATED (Must be different from these):\n${recentQuestions.slice(-3).join('\n')}` : '';
+    `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ JUST GENERATED IN THIS SESSION - AVOID IMMEDIATELY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+These questions were just generated moments ago. Ensure maximum freshness by being especially different from these.
+${recentQuestions.slice(-3).join('\n')}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━` : '';
 
   const notesContext = topicNotes ?
     `\n\nTOPIC NOTES (Use these methods/concepts for the solution):\n${topicNotes.slice(0, 2000)}` : '';
@@ -825,12 +849,52 @@ ${pyqContext}
 ${existingContext}
 ${recentContext}
 
-YOUR TASK:
-1. Study ALL Previous Year Questions (PYQs) carefully - understand pattern, difficulty, and exam style
-2. Create ${count} BRAND NEW question(s) that follow the exam pattern but are completely fresh (NO COPYING)
-3. Use ONLY authentic scientific concepts and proven methods from Topic Notes
-4. Ensure questions test deep conceptual understanding suitable for ${examName}
-5. Make questions challenging but fair - maintain exam-level difficulty
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎯 YOUR TASK - CRITICAL INSTRUCTIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STEP 1: ANALYZE THE INSPIRATION (PYQs)
+- Carefully study the Previous Year Questions provided above
+- Understand the PATTERN: How questions are structured, what concepts are tested
+- Analyze DIFFICULTY LEVEL: Complexity of calculations, depth of concepts
+- Note EXAM STYLE: Format, wording, presentation style used in actual exam
+- Identify KEY TOPICS: Which sub-topics within "${topic.name}" are covered
+
+STEP 2: CHECK WHAT'S ALREADY GENERATED
+- Review ALL questions in the "ALREADY GENERATED" section
+- These are questions for the EXACT SAME configuration (topic, type, slot, part)
+- Note which concepts, scenarios, and variations have been used
+- Identify what approaches are exhausted and what's still available
+
+STEP 3: CREATE FRESH QUESTIONS
+Generate ${count} COMPLETELY NEW question(s) following these rules:
+
+✅ DO:
+- Take INSPIRATION from PYQ patterns, difficulty, and style
+- Create questions testing the SAME LEVEL of understanding
+- Use similar exam format and professional language
+- Test important concepts within "${topic.name}"
+- Vary the scenarios, numbers, and contexts used
+
+❌ DON'T:
+- Copy or slightly modify any PYQ
+- Repeat concepts/scenarios from already generated questions
+- Create questions too similar to recent questions
+- Use exact same numerical values or examples from PYQs
+
+STEP 4: ENSURE ORIGINALITY
+Before finalizing each question:
+- Compare with PYQs: Is this too similar? If yes, redesign completely
+- Compare with already generated: Have we tested this exact scenario? If yes, choose different approach
+- Check uniqueness: Would a student notice this is repetitive? If yes, start fresh
+
+STEP 5: VALIDATE & OUTPUT
+- Use ONLY authentic scientific concepts and proven methods from Topic Notes
+- Ensure questions test deep conceptual understanding suitable for ${examName}
+- Make questions challenging but fair - maintain exam-level difficulty
+- Self-validate using the criteria mentioned earlier
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 CRITICAL REQUIREMENTS for ${questionType} questions:
 

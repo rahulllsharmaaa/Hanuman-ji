@@ -526,34 +526,61 @@ export function QuestionGenerator() {
         totalQuestionsInTopic: topic.questionsToGenerate
       }));
 
-      // Get ALL PYQs for this topic for inspiration (including ALL fields)
-      const { data: pyqs, error: pyqError } = await supabase
+      // Get filtered PYQs for this topic matching the current configuration (course, slot, part, question_type)
+      // PYQs are filtered by topic_id (which belongs to the course through chapters->units->subjects chain)
+      // and optionally by slot, part, and question_type to provide relevant inspiration
+      let pyqQuery = supabase
         .from('questions_topic_wise')
         .select('question_statement, options, answer, solution, question_type, year, slot, part')
         .eq('topic_id', topic.id)
-        .order('year', { ascending: false });
+        .eq('question_type', questionType);
+
+      // Apply slot filter if selected
+      if (selectedSlot) {
+        pyqQuery = pyqQuery.eq('slot', selectedSlot);
+      }
+
+      // Apply part filter if selected
+      if (selectedPart) {
+        pyqQuery = pyqQuery.eq('part', selectedPart);
+      }
+
+      const { data: pyqs, error: pyqError } = await pyqQuery.order('year', { ascending: false });
 
       if (pyqError) {
         console.error('Error loading PYQs:', pyqError);
       }
 
-      console.log(`Loaded ${pyqs?.length || 0} PYQs for topic "${topic.name}"`);
+      console.log(`Loaded ${pyqs?.length || 0} matching PYQs for topic "${topic.name}" (${questionType}${selectedSlot ? `, Slot: ${selectedSlot}` : ''}${selectedPart ? `, Part: ${selectedPart}` : ''})`);
 
-      // Get ALL already generated questions for this topic (not just current question type)
-      const { data: allExistingQuestions, error: existingError } = await supabase
+      // Get ALL already generated questions for this topic matching current configuration
+      // Filter by topic_id, question_type, and optionally slot and part to avoid repetition
+      let existingQuery = supabase
         .from('new_questions')
         .select('question_statement, options, answer')
         .eq('topic_id', topic.id)
-        .eq('question_type', questionType)
-        .order('created_at', { ascending: false });
+        .eq('question_type', questionType);
+
+      // Apply slot filter if selected
+      if (selectedSlot) {
+        existingQuery = existingQuery.eq('slot', selectedSlot);
+      }
+
+      // Apply part filter if selected
+      if (selectedPart) {
+        existingQuery = existingQuery.eq('part', selectedPart);
+      }
+
+      const { data: allExistingQuestions, error: existingError } = await existingQuery.order('created_at', { ascending: false });
 
       if (existingError) {
         console.error('Error loading existing questions:', existingError);
       }
 
-      console.log(`Loaded ${allExistingQuestions?.length || 0} existing ${questionType} questions for topic "${topic.name}"`);
+      console.log(`Loaded ${allExistingQuestions?.length || 0} existing ${questionType} questions for topic "${topic.name}" (${selectedSlot ? `Slot: ${selectedSlot}` : 'All slots'}${selectedPart ? `, Part: ${selectedPart}` : ', All parts'})`);
 
       // Format existing questions for AI context with clear structure
+      // These represent questions already generated for this exact configuration
       const existingQuestionsContext = (allExistingQuestions || []).map((q, index) =>
         `${index + 1}. ${q.question_statement}${q.options && q.options.length > 0 ? `\nOptions: ${q.options.join(', ')}` : ''}${q.answer ? `\nAnswer: ${q.answer}` : ''}`
       ).join('\n\n');
@@ -684,7 +711,9 @@ export function QuestionGenerator() {
                 allGeneratedQuestions.push(question);
                 validQuestionGenerated = true;
 
-                // Add this question to existing questions context for next iterations
+                // CRITICAL: Immediately add this question to the existing context
+                // This ensures the next question generation knows about this question
+                // and won't repeat it, even within the same batch
                 if (allExistingQuestions) {
                   allExistingQuestions.unshift({
                     question_statement: question.question_statement,
@@ -692,6 +721,10 @@ export function QuestionGenerator() {
                     answer: question.answer
                   });
                 }
+
+                // Also update the formatted context string immediately
+                const newQuestionContext = `${allExistingQuestions.length}. ${question.question_statement}${question.options && question.options.length > 0 ? `\nOptions: ${question.options.join(', ')}` : ''}${question.answer ? `\nAnswer: ${question.answer}` : ''}`;
+                console.log(`✅ Question added to anti-repetition context: ${question.question_statement.slice(0, 100)}...`);
 
                 // Keep only last 3 questions for preview
                 setRecentQuestions(prev => {
